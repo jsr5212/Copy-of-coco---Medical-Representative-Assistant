@@ -9,12 +9,13 @@ interface ExtractionTableProps {
   onDelete: (item: MedicineData) => void;
   readOnly?: boolean;
   verificationRequests?: VerificationRequest[];
+  onToggleAdminLock?: (id: string, state: boolean) => void;
 }
 
-const ExtractionTable: React.FC<ExtractionTableProps> = ({ data, onSelect, onEdit, onDelete, readOnly = false, verificationRequests = [] }) => {
-  const LockIcon = ({ isLocked, label, isPending }: { isLocked: boolean; label: string; isPending?: boolean }) => (
+const ExtractionTable: React.FC<ExtractionTableProps> = ({ data, onSelect, onEdit, onDelete, readOnly = false, verificationRequests = [], onToggleAdminLock }) => {
+  const LockIcon = ({ isLocked, label, isPending, colorClass = 'text-blue-600' }: { isLocked: boolean; label: string; isPending?: boolean, colorClass?: string }) => (
     <div className={`flex items-center gap-1 group/lock px-2 py-1 rounded-md border shadow-sm transition-all ${isPending ? 'bg-orange-50 border-orange-100' : 'bg-slate-50 border-slate-100/50'}`}>
-      <div className={`transition-all duration-500 ${isLocked ? 'text-blue-600' : isPending ? 'text-orange-500 animate-pulse' : 'text-slate-300'}`}>
+      <div className={`transition-all duration-500 ${isLocked ? colorClass : isPending ? 'text-orange-500 animate-pulse' : 'text-slate-300'}`}>
         {isLocked ? (
           <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
@@ -62,9 +63,20 @@ const ExtractionTable: React.FC<ExtractionTableProps> = ({ data, onSelect, onEdi
                   </div>
                 </td>
                 <td className="px-8 py-6 whitespace-nowrap">
-                  <div className="flex gap-2">
-                    <LockIcon isLocked={!!item.itLocked} isPending={hasPendingRequest && !item.itLocked} label="IT LOCK" />
-                    <LockIcon isLocked={!!item.seniorLocked} isPending={hasPendingRequest && !item.seniorLocked} label="SENIOR LOCK" />
+                  <div className="flex items-center gap-4">
+                    {/* Admin Lock Toggle */}
+                    <div className="flex flex-col items-center gap-1">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onToggleAdminLock?.(item.id, !item.adminLocked); }}
+                        className={`relative w-8 h-4 rounded-full transition-colors duration-300 ${item.adminLocked ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                      >
+                        <div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform duration-300 shadow-sm ${item.adminLocked ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                      </button>
+                      <span className={`text-[7px] font-black uppercase tracking-tighter ${item.adminLocked ? 'text-indigo-600' : 'text-slate-400'}`}>Admin Lock</span>
+                    </div>
+                    
+                    <LockIcon isLocked={!!item.itLocked} isPending={hasPendingRequest && !item.itLocked} label="IT LOCK" colorClass="text-cyan-600" />
+                    <LockIcon isLocked={!!item.seniorLocked} isPending={hasPendingRequest && !item.seniorLocked} label="SENIOR LOCK" colorClass="text-blue-700" />
                   </div>
                 </td>
                 <td className="px-8 py-6 whitespace-nowrap" onClick={() => onSelect(item)}>
@@ -82,20 +94,20 @@ const ExtractionTable: React.FC<ExtractionTableProps> = ({ data, onSelect, onEdi
                     {!readOnly && (
                       <>
                         <button 
-                          disabled={!!item.seniorLocked || hasPendingRequest}
+                          disabled={!!item.seniorLocked}
                           onClick={(e) => { e.stopPropagation(); onEdit(item); }}
-                          className={`p-2.5 rounded-xl transition-all ${item.seniorLocked || hasPendingRequest ? 'text-slate-200 cursor-not-allowed' : 'bg-slate-100 text-slate-600 opacity-0 group-hover:opacity-100 hover:bg-slate-200 hover:text-slate-900 active:scale-90'}`}
-                          title={item.seniorLocked ? "Immutable (Senior Locked)" : hasPendingRequest ? "Locked (Awaiting Audit)" : "Edit Product"}
+                          className={`p-2.5 rounded-xl transition-all ${item.seniorLocked ? 'text-slate-200 cursor-not-allowed' : 'bg-slate-100 text-slate-600 opacity-0 group-hover:opacity-100 hover:bg-slate-200 hover:text-slate-900 active:scale-90'}`}
+                          title={item.seniorLocked ? "Immutable (Senior Locked)" : "Edit Product (Admin Tier Active)"}
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
                         </button>
                         <button 
-                          disabled={!!item.seniorLocked || hasPendingRequest}
+                          disabled={!!item.seniorLocked}
                           onClick={(e) => { e.stopPropagation(); onDelete(item); }}
-                          className={`p-2.5 rounded-xl transition-all ${item.seniorLocked || hasPendingRequest ? 'text-slate-100 cursor-not-allowed' : 'bg-red-50 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 active:scale-90'}`}
-                          title={item.seniorLocked ? "Immutable (Senior Locked)" : hasPendingRequest ? "Locked (Awaiting Audit)" : "Delete Product"}
+                          className={`p-2.5 rounded-xl transition-all ${item.seniorLocked ? 'text-slate-100 cursor-not-allowed' : 'bg-red-50 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 active:scale-90'}`}
+                          title={item.seniorLocked ? "Immutable (Senior Locked)" : "Delete Product"}
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

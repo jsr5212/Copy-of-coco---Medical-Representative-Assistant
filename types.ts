@@ -10,6 +10,7 @@ export interface MedicineData {
   targetAudience: string;
   imageUrl?: string;
   assignedTo?: string[];
+  adminLocked?: boolean;
   itLocked?: boolean;
   seniorLocked?: boolean;
 }

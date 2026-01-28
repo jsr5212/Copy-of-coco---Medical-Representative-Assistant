@@ -35,8 +35,15 @@ const InternalStaffLogin: React.FC<InternalStaffLoginProps> = ({ onLogin, onCanc
     setStep('AUTHORIZING');
     // Layer 2 Simulation: Dynamic Token Verification
     setTimeout(() => {
-      // Logic: If email contains 'it', login as IT_VERIFIER, else SUPER_ADMIN for internal portal
-      const determinedRole: UserRole = email.toLowerCase().includes('it') ? 'IT_VERIFIER' : 'SUPER_ADMIN';
+      // Logic: Determined by keywords in simulated environment
+      let determinedRole: UserRole = 'SUPER_ADMIN';
+      
+      if (email.toLowerCase().includes('it')) {
+        determinedRole = 'IT_VERIFIER';
+      } else if (email.toLowerCase().includes('senior')) {
+        determinedRole = 'SENIOR_VERIFIER';
+      }
+      
       onLogin(email, determinedRole);
     }, 1200);
   };
@@ -87,7 +94,10 @@ const InternalStaffLogin: React.FC<InternalStaffLoginProps> = ({ onLogin, onCanc
                   value={email} 
                   onChange={e => setEmail(e.target.value)} 
                 />
-                <p className="text-[7px] text-slate-700 italic px-1">Tip: Use email containing 'it' for Engineering Console</p>
+                <div className="flex flex-col gap-1 mt-2 px-1">
+                  <p className="text-[7px] text-slate-700 italic">Tip: Use email with 'it' for IT Console</p>
+                  <p className="text-[7px] text-slate-700 italic">Tip: Use email with 'senior' for Authority Vault</p>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">Cryptographic Key</label>

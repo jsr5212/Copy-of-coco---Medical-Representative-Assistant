@@ -53,7 +53,38 @@ const MOCK_COMPANIES: Company[] = [
 ];
 
 const MOCK_DATA: MedicineData[] = [
-  { id: 'med-1', brand: 'CardioFlow Plus', division: 'Cardiovascular', specialty: 'Cardiologist', indications: 'Management of hypertension.', dosage: '10mg once daily.', usp: '24-hour control.', targetAudience: 'Senior Consultants', itLocked: false, seniorLocked: false }
+  { id: 'med-1', brand: 'CardioFlow Plus', division: 'Cardiovascular', specialty: 'Cardiologist', indications: 'Management of hypertension.', dosage: '10mg once daily.', usp: '24-hour control.', targetAudience: 'Senior Consultants', adminLocked: true, itLocked: false, seniorLocked: false }
+];
+
+const MOCK_VERIFY: VerificationRequest[] = [
+  {
+    id: 'req-init-1',
+    companyId: 'comp-1',
+    type: 'MEDICINE',
+    action: 'UPDATE',
+    entityId: 'med-1',
+    originalData: {
+      brand: 'CardioFlow Plus',
+      division: 'Cardiovascular',
+      specialty: 'Cardiologist',
+      indications: 'Management of hypertension.',
+      dosage: '10mg once daily.',
+      usp: '24-hour control.'
+    },
+    proposedData: {
+       brand: 'CardioFlow Plus',
+       division: 'Cardiovascular',
+       specialty: 'Cardiologist',
+       indications: 'Management of hypertension and Stage II Chronic Heart Failure.',
+       dosage: '10mg once daily / 20mg for severe cases.',
+       usp: 'Superior 24-hour metabolic stability and pulse regulation.',
+       targetAudience: 'Senior Cardiology Consultants'
+    },
+    itVerified: false,
+    seniorVerified: false,
+    status: 'PENDING',
+    createdAt: new Date().toISOString()
+  }
 ];
 
 const MOCK_REPS: MedicalRep[] = [
@@ -71,15 +102,11 @@ const App: React.FC = () => {
   const [data, setData] = useState<MedicineData[]>(MOCK_DATA);
   const [reps, setReps] = useState<MedicalRep[]>(MOCK_REPS);
   const [doctors, setDoctors] = useState<Doctor[]>(MOCK_DOCTORS);
-  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>(MOCK_VERIFY);
   
-  const [currentUser, setCurrentUser] = useState<{role: UserRole, companyId?: string, name?: string} | null>({
-    role: 'IT_VERIFIER',
-    name: 'Tech Lead Jordan',
-    companyId: 'comp-1'
-  });
+  const [currentUser, setCurrentUser] = useState<{role: UserRole, companyId?: string, name?: string} | null>(null);
   
-  const [activeRole, setActiveRole] = useState<UserRole>('IT_VERIFIER');
+  const [activeRole, setActiveRole] = useState<UserRole>('GUEST');
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [subView, setSubView] = useState<CompanySubView>('PORTFOLIO');
@@ -97,11 +124,13 @@ const App: React.FC = () => {
   useEffect(() => {
     const initializeVault = async () => {
       const storedUser = localStorage.getItem(CURRENT_USER_KEY);
-      if (storedUser) {
-        const parsed = JSON.parse(storedUser);
-        setCurrentUser(parsed);
-        setActiveRole(parsed.role);
-      }
+      
+      // FORCED LOGIN FOR USER REQUEST: If no user, mock an IT Verifier session
+      let user = storedUser ? JSON.parse(storedUser) : {
+        role: 'IT_VERIFIER',
+        name: 'Technical.Audit.Lead',
+        companyId: 'internal'
+      };
 
       const decryptItems = async () => {
         const c = localStorage.getItem(COMPANIES_KEY);
@@ -113,28 +142,26 @@ const App: React.FC = () => {
         if (c) setCompanies(await decryptData(c) || MOCK_COMPANIES);
         if (d) setData(await decryptData(d) || MOCK_DATA);
         if (r) setReps(await decryptData(r) || MOCK_REPS);
-        if (v) setVerificationRequests(await decryptData(v) || []);
+        // Ensure we keep the mock verify requests for testing if storage is empty
+        if (v) {
+          const decryptedV = await decryptData(v);
+          if (decryptedV && decryptedV.length > 0) setVerificationRequests(decryptedV);
+        }
         if (docs) setDoctors(await decryptData(docs) || MOCK_DOCTORS);
       };
 
       await decryptItems();
       setIsSecure(true);
       
-      const user = storedUser ? JSON.parse(storedUser) : currentUser;
-      if (!user) {
-        setState('IDLE');
-        setActiveRole('GUEST');
-      } else if (user.role === 'SUPER_ADMIN') {
+      setCurrentUser(user);
+      setActiveRole(user.role);
+      
+      if (user.role === 'SUPER_ADMIN') {
         setState('SUPER_DASHBOARD');
-      } else if (user.role === 'ADMIN' || user.role === 'COMPANY_USER') {
-        setState('VIEWING');
-      } else if (user.role === 'IT_VERIFIER') {
+      } else if (user.role === 'IT_VERIFIER' && user.companyId === 'internal') {
         setState('IT_DASHBOARD');
-      } else if (user.role === 'SENIOR_VERIFIER') {
-        setState('VIEWING');
       } else {
         setState('VIEWING');
-        setActiveRole(user.role);
       }
     };
 
@@ -169,7 +196,7 @@ const App: React.FC = () => {
     if (isViewOnly) exitSimulatedMode();
     else {
       if (currentUser?.role === 'SUPER_ADMIN') setState('SUPER_DASHBOARD');
-      else if (currentUser?.role === 'IT_VERIFIER') setState('IT_DASHBOARD');
+      else if (currentUser?.role === 'IT_VERIFIER' && currentUser.companyId === 'internal') setState('IT_DASHBOARD');
       else {
         setState('VIEWING');
         setSubView('PORTFOLIO');
@@ -181,7 +208,7 @@ const App: React.FC = () => {
     setIsViewOnly(false);
     setActiveRole(currentUser?.role || 'GUEST');
     if (currentUser?.role === 'SUPER_ADMIN') setState('SUPER_DASHBOARD');
-    else if (currentUser?.role === 'IT_VERIFIER') setState('IT_DASHBOARD');
+    else if (currentUser?.role === 'IT_VERIFIER' && currentUser.companyId === 'internal') setState('IT_DASHBOARD');
     else setState('VIEWING');
     setSubView('PORTFOLIO');
   };
@@ -191,7 +218,7 @@ const App: React.FC = () => {
     setIsViewOnly(true);
     setShowMap(false);
     if (role === 'SUPER_ADMIN') setState('SUPER_DASHBOARD');
-    else if (role === 'IT_VERIFIER') setState('IT_DASHBOARD');
+    else if (role === 'IT_VERIFIER' && currentUser?.companyId === 'internal') setState('IT_DASHBOARD');
     else {
       setState('VIEWING');
       setSubView('PORTFOLIO');
@@ -209,6 +236,7 @@ const App: React.FC = () => {
           } else if (updatedReq.type === 'REPRESENTATIVE') {
             setReps(r => r.map(rep => rep.id === updatedReq.entityId ? { ...rep, itLocked: true } : rep));
           }
+          setNotification("Stage 1 Technical Lock applied successfully.");
         }
         if (level === 'SENIOR') {
           updatedReq.seniorVerified = true;
@@ -226,6 +254,7 @@ const App: React.FC = () => {
               setReps(r => r.filter(rep => rep.id !== updatedReq.entityId));
             }
           }
+          setNotification("Stage 2 Authority Lock complete. Record is now immutable.");
         }
         return updatedReq;
       }
@@ -237,6 +266,7 @@ const App: React.FC = () => {
     setVerificationRequests(prev => prev.map(req => 
       req.id === requestId ? { ...req, status: 'REJECTED' as const } : req
     ));
+    setNotification("Verification request rejected and discarded.");
   };
 
   const handleRegisterCompany = (newCompanyData: any) => {
@@ -266,29 +296,41 @@ const App: React.FC = () => {
         reader.readAsDataURL(file);
       });
       const extracted = await extractMedicineInfo(base64, file.type);
-      if (extracted.length > 0) {
+      
+      setState('VIEWING');
+      setSubView('PORTFOLIO');
+
+      if (extracted && extracted.length > 0) {
         setData(prev => [...prev, ...extracted]);
-        setState('VIEWING');
         setNotification(`Extracted ${extracted.length} brands successfully. You can now lock and assign them for audit.`);
+      } else {
+        setNotification("No medicines were extracted. Please ensure the PDF contains clinical brand data.");
       }
     } catch (err: any) {
-      setError(err.message || "Extraction failed.");
+      console.error(err);
       setState('VIEWING');
-      setNotification(`Error: ${err.message || "Extraction failed"}`);
+      setNotification(`Extraction failed: ${err.message || "Unknown error"}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleBulkVerify = (medicineIds: string[]) => {
-    const newRequests: VerificationRequest[] = medicineIds.map(id => {
+    setData(prev => prev.map(m => 
+      medicineIds.includes(m.id) ? { ...m, adminLocked: true } : m
+    ));
+
+    const timestamp = Date.now();
+    const newRequests: VerificationRequest[] = medicineIds.map((id, index) => {
       const medicine = data.find(m => m.id === id);
       return {
-        id: `req-${Date.now()}-${id}`,
+        id: `req-${timestamp}-${index}`,
         companyId: currentUser?.companyId || 'comp-demo',
         type: 'MEDICINE',
         action: 'UPDATE',
         entityId: id,
         originalData: {},
-        proposedData: medicine || {},
+        proposedData: medicine ? { ...medicine, adminLocked: true } : {},
         itVerified: false,
         seniorVerified: false,
         status: 'PENDING',
@@ -297,7 +339,33 @@ const App: React.FC = () => {
     });
 
     setVerificationRequests(prev => [...prev, ...newRequests]);
-    setNotification(`${medicineIds.length} clinical records locked and assigned to IT & Senior Audit.`);
+    setNotification(`${medicineIds.length} clinical records secured by Admin and assigned to IT & Senior Audit.`);
+  };
+
+  const handleToggleAdminLock = (medicineId: string, newState: boolean) => {
+    setData(prev => prev.map(m => m.id === medicineId ? { ...m, adminLocked: newState } : m));
+    
+    if (newState) {
+      const medicine = data.find(m => m.id === medicineId);
+      const newRequest: VerificationRequest = {
+        id: `req-${Date.now()}`,
+        companyId: currentUser?.companyId || 'comp-demo',
+        type: 'MEDICINE',
+        action: 'UPDATE',
+        entityId: medicineId,
+        originalData: {},
+        proposedData: medicine ? { ...medicine, adminLocked: true } : {},
+        itVerified: false,
+        seniorVerified: false,
+        status: 'PENDING',
+        createdAt: new Date().toISOString()
+      };
+      setVerificationRequests(prev => [...prev, newRequest]);
+      setNotification(`Record "${medicine?.brand}" locked by Admin and assigned for clinical audit.`);
+    } else {
+      setVerificationRequests(prev => prev.filter(r => !(r.entityId === medicineId && r.status === 'PENDING')));
+      setNotification(`Record unlocked. Audit requests withdrawn.`);
+    }
   };
 
   const requestVerification = (type: 'MEDICINE' | 'REPRESENTATIVE', action: 'UPDATE' | 'DELETE', entityId: string, proposedData: any) => {
@@ -321,6 +389,14 @@ const App: React.FC = () => {
     setIsAddingMedicine(false);
   };
 
+  const handleClientLogin = (email: string, pass: string, role: UserRole) => {
+    const user = { role, name: email.split('@')[0], companyId: 'comp-1' };
+    setCurrentUser(user);
+    setActiveRole(role);
+    setState('VIEWING');
+    setNotification(`Authenticated as ${role.replace('_', ' ')} for Novartis Global.`);
+  };
+
   const followUpDoctors = useMemo(() => {
     return doctors.filter(d => d.followUpDate);
   }, [doctors]);
@@ -335,9 +411,18 @@ const App: React.FC = () => {
   }
 
   if (state === 'SUPER_DASHBOARD') return <SuperAdminDashboard companies={companies} onExit={handleLogout} />;
-  if (state === 'IT_DASHBOARD') return <ITDashboard companyName={currentUser?.name || 'PharmaCorp'} requests={verificationRequests} onApprove={handleApprove} onReject={handleReject} onExit={handleLogout} />;
+  
+  if (state === 'IT_DASHBOARD') return (
+    <ITDashboard 
+      companyName={currentUser?.name || 'Technical Node'} 
+      requests={verificationRequests} 
+      onApprove={handleApprove} 
+      onReject={handleReject} 
+      onExit={handleLogout}
+      medicines={data}
+    />
+  );
 
-  const isFieldRep = activeRole === 'FIELD_REP';
   const isSenior = activeRole === 'SENIOR_VERIFIER';
   const isAdmin = activeRole === 'ADMIN' || activeRole === 'COMPANY_USER';
 
@@ -376,19 +461,14 @@ const App: React.FC = () => {
               <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter leading-none">The Intelligence Layer <br/><span className="font-serif italic text-slate-400">for Medical Forces.</span></h1>
               <div className="flex justify-center gap-6 pt-6">
                  <button onClick={() => setState('REGISTERING')} className="bg-[#1ec3c3] text-white px-10 py-5 rounded-3xl font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-105 transition-all">Register Organization</button>
-                 <button onClick={() => {
-                   const user = { role: 'FIELD_REP' as UserRole, name: 'Alex Thompson', companyId: 'comp-demo' };
-                   setCurrentUser(user);
-                   setActiveRole('FIELD_REP');
-                   setState('VIEWING');
-                 }} className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-105 transition-all">MR Access</button>
+                 <button onClick={() => setState('LOGIN')} className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-105 transition-all">Client Login</button>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-5xl mx-auto">
               <div onClick={() => setState('LOGIN')} className="group cursor-pointer bg-white p-12 rounded-[4rem] border border-slate-100 shadow-2xl hover:border-[#1ec3c3] transition-all hover:-translate-y-2">
                 <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center text-white mb-10"><svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></div>
-                <h3 className="text-3xl font-black text-slate-900 mb-4">Field Rep Dashboard</h3>
-                <p className="text-slate-400 font-medium">Manage portfolio, doctors, and synchronized clinical syncs.</p>
+                <h3 className="text-3xl font-black text-slate-900 mb-4">Authority Hub</h3>
+                <p className="text-slate-400 font-medium">Full tactical oversight. Verify data, manage forces, and strategize regions.</p>
               </div>
               <div onClick={() => setState('DOCTOR_PORTAL')} className="group cursor-pointer bg-white p-12 rounded-[4rem] shadow-xl hover:border-[#1ec3c3] transition-all hover:-translate-y-2">
                 <div className="w-20 h-20 bg-[#1ec3c3] rounded-[2rem] flex items-center justify-center text-white mb-10"><svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg></div>
@@ -406,12 +486,7 @@ const App: React.FC = () => {
           />
         )}
 
-        {state === 'LOGIN' && <LoginForm onLogin={(e, p) => { 
-          const user = { role: 'ADMIN' as UserRole, name: 'Sarah Smith', companyId: 'comp-1' };
-          setCurrentUser(user);
-          setActiveRole('ADMIN');
-          setState('VIEWING'); 
-        }} onCancel={() => setState('IDLE')} />}
+        {state === 'LOGIN' && <LoginForm onLogin={handleClientLogin} onCancel={() => setState('IDLE')} />}
         
         {state === 'SUPER_LOGIN' && <InternalStaffLogin onLogin={(email, role) => {
           setCurrentUser({ role, name: email.split('@')[0], companyId: 'internal' });
@@ -448,6 +523,7 @@ const App: React.FC = () => {
                 onShowMap={() => setShowMap(true)}
                 activeRole={activeRole}
                 onBulkVerify={handleBulkVerify}
+                onToggleAdminLock={handleToggleAdminLock}
               />
             ) : isSenior ? (
               <SeniorDashboard 
@@ -473,7 +549,7 @@ const App: React.FC = () => {
                          <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[8px] font-black uppercase tracking-widest border border-slate-200">Field Operations</span>
                       </div>
                       <p className="text-sm text-slate-400 font-medium mt-1 uppercase tracking-[0.2em]">
-                        Territory Manager // {currentUser?.companyId === 'comp-demo' ? 'Novartis Global' : 'PharmaCorp'}
+                        Territory Manager // {currentUser?.companyId === 'comp-1' ? 'Novartis Global' : 'PharmaCorp'}
                       </p>
                     </div>
                   </div>

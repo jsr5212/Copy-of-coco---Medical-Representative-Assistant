@@ -30,6 +30,7 @@ interface ClientAdminDashboardProps {
   onShowMap: () => void;
   activeRole: UserRole;
   onBulkVerify: (ids: string[]) => void;
+  onToggleAdminLock: (id: string, state: boolean) => void;
 }
 
 const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
@@ -38,14 +39,15 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
     verificationRequests, onFileUpload, fileInputRef, searchTerm, 
     setSearchTerm, onAddMedicine, onEditMedicine, onDeleteMedicine, onAddRep, 
     onEditRep, onDeleteRep, onApprove, onReject, onShowPresentation,
-    onShowMap, activeRole, onBulkVerify
+    onShowMap, activeRole, onBulkVerify, onToggleAdminLock
   } = props;
 
   // Identify medicines that have been extracted but not yet submitted for verification
-  const unverifiedMeds = data.filter(m => {
-    const hasRequest = verificationRequests.some(r => r.entityId === m.id);
-    return !hasRequest && !m.seniorLocked;
-  });
+  const unverifiedMeds = data.filter(m => !m.adminLocked && !m.seniorLocked);
+  const filteredData = data.filter(m => 
+    m.brand.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    m.division.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const stats = {
     verifiedMeds: data.filter(m => m.seniorLocked).length,
@@ -122,6 +124,11 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
               }`}
             >
               {tab.label}
+              {tab.id === 'PORTFOLIO' && unverifiedMeds.length > 0 && (
+                <span className="absolute -top-1 -right-4 w-4 h-4 bg-[#1ec3c3] text-slate-900 text-[8px] flex items-center justify-center rounded-full animate-pulse shadow-sm">
+                   {unverifiedMeds.length}
+                </span>
+              )}
               {tab.id === 'VERIFICATION' && stats.pendingVerifications > 0 && (
                 <span className="absolute -top-1 -right-4 w-4 h-4 bg-red-500 text-white text-[8px] flex items-center justify-center rounded-full animate-bounce">
                   {stats.pendingVerifications}
@@ -148,9 +155,15 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
         {subView === 'PORTFOLIO' && (
           <div className="space-y-10">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-              <div>
-                 <h2 className="text-4xl font-black text-slate-900 tracking-tight">Therapeutic Portfolio</h2>
-                 <p className="text-slate-400 font-medium mt-1">Extract clinical modules or manually register brand assets into the secure vault.</p>
+              <div className="flex items-center gap-4">
+                 <div>
+                    <h2 className="text-4xl font-black text-slate-900 tracking-tight">Therapeutic Portfolio</h2>
+                    <p className="text-slate-400 font-medium mt-1">Extract clinical modules or manually register brand assets into the secure vault.</p>
+                 </div>
+                 <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 hidden md:block">
+                    <div className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Vault Status</div>
+                    <div className="text-xs font-black text-indigo-900">{data.length} Clinical Nodes</div>
+                 </div>
               </div>
               <div className="flex flex-wrap gap-4 w-full lg:w-auto">
                 <div className="relative flex-1 lg:w-[340px]">
@@ -185,14 +198,42 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
                 <input type="file" ref={fileInputRef} onChange={onFileUpload} className="hidden" accept=".pdf" />
               </div>
             </div>
-            <ExtractionTable 
-              data={data.filter(m => m.brand.toLowerCase().includes(searchTerm.toLowerCase()))} 
-              onSelect={(med) => onShowPresentation([med])} 
-              onEdit={onEditMedicine} 
-              onDelete={onDeleteMedicine} 
-              readOnly={false}
-              verificationRequests={verificationRequests}
-            />
+
+            {filteredData.length > 0 ? (
+              <ExtractionTable 
+                data={filteredData} 
+                onSelect={(med) => onShowPresentation([med])} 
+                onEdit={onEditMedicine} 
+                onDelete={onDeleteMedicine} 
+                readOnly={false}
+                verificationRequests={verificationRequests}
+                onToggleAdminLock={onToggleAdminLock}
+              />
+            ) : (
+              <div className="py-32 text-center bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
+                   <svg className="w-10 h-10 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86 7.717l.477 2.387a2 2 0 00.547 1.022l11.232-11.232a2.828 2.828 0 00-4-4L19.428 15.428z" />
+                   </svg>
+                </div>
+                <h3 className="text-xl font-black text-slate-300 uppercase tracking-widest">
+                  {data.length === 0 ? "Corporate Vault Empty" : "No Matches Found"}
+                </h3>
+                <p className="text-slate-400 text-sm mt-2 max-w-sm mx-auto">
+                  {data.length === 0 
+                    ? "Upload your clinical medicine glossary PDF using the AI Extraction button to populate your therapeutic portfolio." 
+                    : `No brands match your search term "${searchTerm}". Try searching by Therapeutic Area or Indication instead.`}
+                </p>
+                {data.length > 0 && searchTerm !== '' && (
+                  <button 
+                    onClick={() => setSearchTerm('')}
+                    className="mt-6 text-indigo-600 font-black uppercase text-[10px] tracking-widest hover:underline"
+                  >
+                    Clear All Filters
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
