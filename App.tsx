@@ -53,11 +53,11 @@ const MOCK_COMPANIES: Company[] = [
 ];
 
 const MOCK_DATA: MedicineData[] = [
-  { id: 'med-1', brand: 'CardioFlow Plus', division: 'Cardiovascular', specialty: 'Cardiologist', indications: 'Management of hypertension.', dosage: '10mg once daily.', usp: '24-hour control.', targetAudience: 'Senior Consultants', itLocked: true, seniorLocked: true }
+  { id: 'med-1', brand: 'CardioFlow Plus', division: 'Cardiovascular', specialty: 'Cardiologist', indications: 'Management of hypertension.', dosage: '10mg once daily.', usp: '24-hour control.', targetAudience: 'Senior Consultants', itLocked: false, seniorLocked: false }
 ];
 
 const MOCK_REPS: MedicalRep[] = [
-  { id: 'rep-1', name: 'Sarah Jenkins', email: 's.jenkins@pharma.com', region: 'North Sector', username: 'sarah.j.123', tempPass: 'PHARMA2025', assignedDivisions: ['Cardiovascular'], status: 'ACTIVE', itLocked: true, seniorLocked: false }
+  { id: 'rep-1', name: 'Sarah Jenkins', email: 's.jenkins@pharma.com', region: 'North Sector', username: 'sarah.j.123', tempPass: 'PHARMA2025', assignedDivisions: ['Cardiovascular'], status: 'ACTIVE', itLocked: false, seniorLocked: false }
 ];
 
 const MOCK_DOCTORS: Doctor[] = [
@@ -72,9 +72,14 @@ const App: React.FC = () => {
   const [reps, setReps] = useState<MedicalRep[]>(MOCK_REPS);
   const [doctors, setDoctors] = useState<Doctor[]>(MOCK_DOCTORS);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
-  const [currentUser, setCurrentUser] = useState<{role: UserRole, companyId?: string, name?: string} | null>(null);
   
-  const [activeRole, setActiveRole] = useState<UserRole>('GUEST');
+  const [currentUser, setCurrentUser] = useState<{role: UserRole, companyId?: string, name?: string} | null>({
+    role: 'IT_VERIFIER',
+    name: 'Tech Lead Jordan',
+    companyId: 'comp-1'
+  });
+  
+  const [activeRole, setActiveRole] = useState<UserRole>('IT_VERIFIER');
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [subView, setSubView] = useState<CompanySubView>('PORTFOLIO');
@@ -89,11 +94,14 @@ const App: React.FC = () => {
   const [selectedDivision, setSelectedDivision] = useState('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // SECURE BOOT SEQUENCE
   useEffect(() => {
     const initializeVault = async () => {
       const storedUser = localStorage.getItem(CURRENT_USER_KEY);
-      if (storedUser) setCurrentUser(JSON.parse(storedUser));
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        setCurrentUser(parsed);
+        setActiveRole(parsed.role);
+      }
 
       const decryptItems = async () => {
         const c = localStorage.getItem(COMPANIES_KEY);
@@ -112,13 +120,19 @@ const App: React.FC = () => {
       await decryptItems();
       setIsSecure(true);
       
-      const user = storedUser ? JSON.parse(storedUser) : null;
-      if (!user) setState('IDLE');
-      else if (user.role === 'SUPER_ADMIN') setState('SUPER_DASHBOARD');
-      else if (user.role === 'ADMIN' || user.role === 'COMPANY_USER') setState('VIEWING');
-      else if (user.role === 'IT_VERIFIER') setState('IT_DASHBOARD');
-      else if (user.role === 'SENIOR_VERIFIER') setState('VIEWING');
-      else {
+      const user = storedUser ? JSON.parse(storedUser) : currentUser;
+      if (!user) {
+        setState('IDLE');
+        setActiveRole('GUEST');
+      } else if (user.role === 'SUPER_ADMIN') {
+        setState('SUPER_DASHBOARD');
+      } else if (user.role === 'ADMIN' || user.role === 'COMPANY_USER') {
+        setState('VIEWING');
+      } else if (user.role === 'IT_VERIFIER') {
+        setState('IT_DASHBOARD');
+      } else if (user.role === 'SENIOR_VERIFIER') {
+        setState('VIEWING');
+      } else {
         setState('VIEWING');
         setActiveRole(user.role);
       }
@@ -127,7 +141,6 @@ const App: React.FC = () => {
     initializeVault();
   }, []);
 
-  // SECURE PERSISTENCE LAYER
   useEffect(() => {
     if (!isSecure) return;
     
@@ -256,12 +269,35 @@ const App: React.FC = () => {
       if (extracted.length > 0) {
         setData(prev => [...prev, ...extracted]);
         setState('VIEWING');
-        setNotification(`Extracted ${extracted.length} brands.`);
+        setNotification(`Extracted ${extracted.length} brands successfully. You can now lock and assign them for audit.`);
       }
     } catch (err: any) {
       setError(err.message || "Extraction failed.");
       setState('VIEWING');
+      setNotification(`Error: ${err.message || "Extraction failed"}`);
     }
+  };
+
+  const handleBulkVerify = (medicineIds: string[]) => {
+    const newRequests: VerificationRequest[] = medicineIds.map(id => {
+      const medicine = data.find(m => m.id === id);
+      return {
+        id: `req-${Date.now()}-${id}`,
+        companyId: currentUser?.companyId || 'comp-demo',
+        type: 'MEDICINE',
+        action: 'UPDATE',
+        entityId: id,
+        originalData: {},
+        proposedData: medicine || {},
+        itVerified: false,
+        seniorVerified: false,
+        status: 'PENDING',
+        createdAt: new Date().toISOString()
+      };
+    });
+
+    setVerificationRequests(prev => [...prev, ...newRequests]);
+    setNotification(`${medicineIds.length} clinical records locked and assigned to IT & Senior Audit.`);
   };
 
   const requestVerification = (type: 'MEDICINE' | 'REPRESENTATIVE', action: 'UPDATE' | 'DELETE', entityId: string, proposedData: any) => {
@@ -301,7 +337,7 @@ const App: React.FC = () => {
   if (state === 'SUPER_DASHBOARD') return <SuperAdminDashboard companies={companies} onExit={handleLogout} />;
   if (state === 'IT_DASHBOARD') return <ITDashboard companyName={currentUser?.name || 'PharmaCorp'} requests={verificationRequests} onApprove={handleApprove} onReject={handleReject} onExit={handleLogout} />;
 
-  const isFieldRep = activeRole === 'FIELD_REP' || activeRole === 'GUEST';
+  const isFieldRep = activeRole === 'FIELD_REP';
   const isSenior = activeRole === 'SENIOR_VERIFIER';
   const isAdmin = activeRole === 'ADMIN' || activeRole === 'COMPANY_USER';
 
@@ -340,7 +376,12 @@ const App: React.FC = () => {
               <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter leading-none">The Intelligence Layer <br/><span className="font-serif italic text-slate-400">for Medical Forces.</span></h1>
               <div className="flex justify-center gap-6 pt-6">
                  <button onClick={() => setState('REGISTERING')} className="bg-[#1ec3c3] text-white px-10 py-5 rounded-3xl font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-105 transition-all">Register Organization</button>
-                 <button onClick={() => setState('LOGIN')} className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-105 transition-all">MR Access</button>
+                 <button onClick={() => {
+                   const user = { role: 'FIELD_REP' as UserRole, name: 'Alex Thompson', companyId: 'comp-demo' };
+                   setCurrentUser(user);
+                   setActiveRole('FIELD_REP');
+                   setState('VIEWING');
+                 }} className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black uppercase tracking-widest text-xs shadow-2xl hover:scale-105 transition-all">MR Access</button>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-5xl mx-auto">
@@ -355,33 +396,6 @@ const App: React.FC = () => {
                 <p className="text-slate-400 font-medium">Join a synchronized session for a patients-centric clinical briefing.</p>
               </div>
             </div>
-
-            {/* Prominent Internal Access Footer */}
-            <div className="pt-24 text-center">
-              <div className="max-w-xl mx-auto p-12 bg-slate-950 rounded-[3rem] border border-slate-800 shadow-2xl relative overflow-hidden group">
-                 <div className="absolute inset-0 bg-gradient-to-br from-[#1ec3c3]/5 to-transparent"></div>
-                 <div className="relative z-10 flex flex-col items-center gap-6">
-                    <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 text-[#1ec3c3]">
-                       <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                    </div>
-                    <div className="space-y-2">
-                       <h4 className="text-xl font-black text-white uppercase tracking-widest">Internal Control Hub</h4>
-                       <p className="text-xs text-slate-500 font-medium uppercase tracking-[0.2em]">Authorized Personnel & System Engineers Only</p>
-                    </div>
-                    <button 
-                      onClick={() => setState('SUPER_LOGIN')}
-                      className="bg-white text-slate-950 px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#1ec3c3] transition-all hover:scale-105"
-                    >
-                       Access Nexus Terminal
-                    </button>
-                    <div className="flex items-center gap-2 mt-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></div>
-                       <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Global Node Status: Optimal</span>
-                    </div>
-                 </div>
-              </div>
-              <div className="mt-12 text-[8px] text-slate-300 font-black uppercase tracking-[0.5em] opacity-40">Nexus OS v4.2 // Pharmaintel HQ Global</div>
-            </div>
           </div>
         )}
 
@@ -393,9 +407,9 @@ const App: React.FC = () => {
         )}
 
         {state === 'LOGIN' && <LoginForm onLogin={(e, p) => { 
-          const user = { role: 'FIELD_REP' as UserRole, name: 'Alex Thompson', companyId: 'comp-demo' };
+          const user = { role: 'ADMIN' as UserRole, name: 'Sarah Smith', companyId: 'comp-1' };
           setCurrentUser(user);
-          setActiveRole('FIELD_REP');
+          setActiveRole('ADMIN');
           setState('VIEWING'); 
         }} onCancel={() => setState('IDLE')} />}
         
@@ -412,7 +426,7 @@ const App: React.FC = () => {
             {isAdmin ? (
               <ClientAdminDashboard 
                 userName={currentUser?.name || 'Admin'}
-                companyName={currentUser?.companyId === 'comp-demo' ? 'Novartis Global' : 'PharmaCorp'}
+                companyName={currentUser?.companyId === 'comp-1' ? 'Novartis Global' : 'PharmaCorp'}
                 data={data}
                 reps={reps}
                 subView={subView}
@@ -433,10 +447,11 @@ const App: React.FC = () => {
                 onShowPresentation={(sel) => { setPresentationData(sel); setShowPresentation(true); }}
                 onShowMap={() => setShowMap(true)}
                 activeRole={activeRole}
+                onBulkVerify={handleBulkVerify}
               />
             ) : isSenior ? (
               <SeniorDashboard 
-                companyName={currentUser?.companyId === 'comp-demo' ? 'Novartis Global' : 'PharmaCorp'} 
+                companyName={currentUser?.companyId === 'comp-1' ? 'Novartis Global' : 'PharmaCorp'} 
                 requests={verificationRequests} 
                 medicines={data} 
                 reps={reps} 
@@ -462,7 +477,7 @@ const App: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="flex flex-wrap items-center gap-4">
                     <div className="text-center px-6 py-4 bg-slate-50 rounded-[2rem] border border-slate-100 min-w-[120px]">
                       <div className="text-2xl font-black text-slate-900">{followUpDoctors.length}</div>
                       <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Follow-ups Due</div>
@@ -471,6 +486,16 @@ const App: React.FC = () => {
                       <div className="text-2xl font-black text-slate-900">{doctors.length}</div>
                       <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Managed Nodes</div>
                     </div>
+                    <button 
+                      onClick={handleLogout}
+                      className="px-6 py-4 bg-red-50 text-red-600 rounded-[2rem] border border-red-100 text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all flex items-center gap-2 shadow-sm"
+                      title="Securely terminate session"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7" />
+                      </svg>
+                      Exit Vault
+                    </button>
                   </div>
                 </div>
 
@@ -485,13 +510,13 @@ const App: React.FC = () => {
                       <button 
                         key={tab.id}
                         onClick={() => setSubView(tab.id as any)}
-                        className={`text-[10px] font-black uppercase tracking-widest pb-4 border-b-2 transition-all ${subView === tab.id ? 'border-[#1ec3c3] text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                        className={`text-[10px] font-black uppercase tracking-widest pb-4 border-b-2 transition-all hover:text-slate-900 ${subView === tab.id ? 'border-[#1ec3c3] text-slate-900' : 'border-transparent text-slate-400'}`}
                       >
                         {tab.label}
                       </button>
                     ))}
                   </div>
-                  <button onClick={() => setShowMap(true)} className="bg-slate-950 text-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:scale-105 transition-all shadow-xl">
+                  <button onClick={() => setShowMap(true)} className="bg-slate-950 text-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:scale-105 transition-all shadow-xl active:bg-black">
                     <svg className="w-4 h-4 text-[#1ec3c3]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
                     Operational Ecosystem
                   </button>
@@ -518,6 +543,7 @@ const App: React.FC = () => {
                       onAdd={(d) => setDoctors([...doctors, { ...d, id: `doc-${Date.now()}`, alignedMedicineIds: [] }])}
                       onUpdate={(updated) => setDoctors(doctors.map(d => d.id === updated.id ? updated : d))}
                       onDelete={(id) => setDoctors(doctors.filter(d => d.id !== id))}
+                      onPrepareSync={(sel) => { setPresentationData(sel); setShowPresentation(true); }}
                     />
                   )}
 
@@ -527,9 +553,9 @@ const App: React.FC = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {followUpDoctors.map(doc => (
                           <div key={doc.id} className="p-10 bg-slate-50 rounded-[4rem] border border-slate-200 hover:border-[#1ec3c3]/40 transition-all group hover:bg-white shadow-xl hover:shadow-2xl">
-                            <div className="flex justify-between items-start mb-8">
+                            <div className="flex items-start justify-between mb-8">
                                <div className="w-14 h-14 rounded-2xl bg-white text-slate-900 flex items-center justify-center font-black text-xl shadow-lg group-hover:scale-110 transition-transform">
-                                 {doc.name.charAt(4)}
+                                 {doc.name.charAt(4) || doc.name.charAt(0)}
                                </div>
                                <span className="text-[9px] font-black bg-[#1ec3c3] text-white px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg">Action Required</span>
                             </div>
@@ -571,7 +597,16 @@ const App: React.FC = () => {
       </main>
 
       {(editingMedicine || isAddingMedicine) && (
-        <EditMedicineModal medicine={editingMedicine || undefined} isNew={isAddingMedicine} onSave={(updated) => requestVerification('MEDICINE', 'UPDATE', updated.id, updated)} onClose={() => { setEditingMedicine(null); setIsAddingMedicine(false); }} />
+        <EditMedicineModal medicine={editingMedicine || undefined} isNew={isAddingMedicine} onSave={(updated) => {
+          if (isAddingMedicine) {
+            setData(prev => [...prev, updated]);
+            setNotification("Record registered successfully.");
+          } else {
+            requestVerification('MEDICINE', 'UPDATE', updated.id, updated);
+          }
+          setEditingMedicine(null);
+          setIsAddingMedicine(false);
+        }} onClose={() => { setEditingMedicine(null); setIsAddingMedicine(false); }} />
       )}
 
       {editingRep && (

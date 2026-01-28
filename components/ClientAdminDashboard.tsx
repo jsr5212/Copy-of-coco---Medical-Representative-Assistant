@@ -29,6 +29,7 @@ interface ClientAdminDashboardProps {
   onShowPresentation: (meds: MedicineData[]) => void;
   onShowMap: () => void;
   activeRole: UserRole;
+  onBulkVerify: (ids: string[]) => void;
 }
 
 const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
@@ -37,13 +38,26 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
     verificationRequests, onFileUpload, fileInputRef, searchTerm, 
     setSearchTerm, onAddMedicine, onEditMedicine, onDeleteMedicine, onAddRep, 
     onEditRep, onDeleteRep, onApprove, onReject, onShowPresentation,
-    onShowMap, activeRole
+    onShowMap, activeRole, onBulkVerify
   } = props;
+
+  // Identify medicines that have been extracted but not yet submitted for verification
+  const unverifiedMeds = data.filter(m => {
+    const hasRequest = verificationRequests.some(r => r.entityId === m.id);
+    return !hasRequest && !m.seniorLocked;
+  });
 
   const stats = {
     verifiedMeds: data.filter(m => m.seniorLocked).length,
     totalDivisions: new Set(data.map(m => m.division)).size,
     pendingVerifications: verificationRequests.filter(r => r.status === 'PENDING').length
+  };
+
+  const handleCommitBatch = () => {
+    if (unverifiedMeds.length === 0) return;
+    if (window.confirm(`Lock ${unverifiedMeds.length} clinical records and assign them to IT & Senior Verifiers for final verification?`)) {
+      onBulkVerify(unverifiedMeds.map(m => m.id));
+    }
   };
 
   return (
@@ -143,6 +157,17 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
                   <svg className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                   <input type="text" placeholder="Search brands or indications..." className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all font-bold" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
+                
+                {unverifiedMeds.length > 0 && (
+                  <button 
+                    onClick={handleCommitBatch}
+                    className="bg-[#1ec3c3] text-slate-900 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-[#18a0a0] transition-all hover:scale-105 flex items-center gap-2 animate-pulse"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                    Lock & Assign Audit ({unverifiedMeds.length})
+                  </button>
+                )}
+
                 <button 
                   onClick={onAddMedicine}
                   className="bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all hover:scale-105 flex items-center gap-2"
@@ -166,6 +191,7 @@ const ClientAdminDashboard: React.FC<ClientAdminDashboardProps> = (props) => {
               onEdit={onEditMedicine} 
               onDelete={onDeleteMedicine} 
               readOnly={false}
+              verificationRequests={verificationRequests}
             />
           </div>
         )}

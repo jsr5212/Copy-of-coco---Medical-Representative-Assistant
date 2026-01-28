@@ -8,9 +8,10 @@ interface DoctorManagementProps {
   onAdd: (doc: Omit<Doctor, 'id' | 'alignedMedicineIds'>) => void;
   onUpdate: (doc: Doctor) => void;
   onDelete: (id: string) => void;
+  onPrepareSync: (medicines: MedicineData[]) => void;
 }
 
-const DoctorManagement: React.FC<DoctorManagementProps> = ({ doctors, medicines, onAdd, onUpdate, onDelete }) => {
+const DoctorManagement: React.FC<DoctorManagementProps> = ({ doctors, medicines, onAdd, onUpdate, onDelete, onPrepareSync }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [formData, setFormData] = useState({ name: '', specialty: '', hospital: '', followUpDate: '' });
   const [aligningDocId, setAligningDocId] = useState<string | null>(null);
@@ -28,6 +29,16 @@ const DoctorManagement: React.FC<DoctorManagementProps> = ({ doctors, medicines,
       ? doc.alignedMedicineIds.filter(id => id !== medId)
       : [...doc.alignedMedicineIds, medId];
     onUpdate({ ...doc, alignedMedicineIds: updatedIds });
+  };
+
+  const handlePrepareSync = (doc: Doctor) => {
+    const alignedMeds = medicines.filter(m => doc.alignedMedicineIds.includes(m.id));
+    if (alignedMeds.length === 0) {
+      alert("Please align at least one clinical brand before preparing a sync.");
+      setAligningDocId(doc.id);
+      return;
+    }
+    onPrepareSync(alignedMeds);
   };
 
   return (
@@ -75,7 +86,7 @@ const DoctorManagement: React.FC<DoctorManagementProps> = ({ doctors, medicines,
             <div className="flex justify-between items-start mb-8">
               <div className="flex items-center gap-6">
                 <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-lg group-hover:scale-110 transition-transform">
-                  {doc.name.charAt(4)}
+                  {doc.name.charAt(4) || doc.name.charAt(0)}
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-slate-900 leading-tight">{doc.name}</h3>
@@ -111,7 +122,7 @@ const DoctorManagement: React.FC<DoctorManagementProps> = ({ doctors, medicines,
                   {medicines.length === 0 && <p className="col-span-2 text-center text-slate-300 italic text-[10px]">No medicines in vault.</p>}
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 min-h-[40px]">
                   {doc.alignedMedicineIds.map(id => {
                     const med = medicines.find(m => m.id === id);
                     return med ? (
@@ -127,7 +138,12 @@ const DoctorManagement: React.FC<DoctorManagementProps> = ({ doctors, medicines,
 
             <div className="mt-10 flex gap-4">
                <button className="flex-1 py-4 bg-slate-50 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-100 transition-all">Contact History</button>
-               <button className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">Prepare Sync</button>
+               <button 
+                 onClick={() => handlePrepareSync(doc)}
+                 className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95"
+               >
+                 Prepare Sync
+               </button>
             </div>
           </div>
         ))}
