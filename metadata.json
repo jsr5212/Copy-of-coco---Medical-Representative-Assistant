@@ -1,0 +1,7 @@
+{
+  "name": "Copy of coco - Medical Representative Assistant",
+  "description": "An AI-powered tool for medical representatives to upload medicine glossaries, extract structured brand/division data, and automatically generate presentations.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
